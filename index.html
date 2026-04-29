@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-Hans-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="content-language" content="zh-Hans-CN" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>用户登记小程序</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232481cc'/%3E%3Cpath d='M50 17 42 49c-.6 2.4-2.2 3-4.4 1.9l-12-8.8-5.8 5.6c-.6.6-1.2 1.2-2.5 1.2l.9-12.2L40.5 16.5c1-.9-.2-1.4-1.5-.5L11.4 33.4-.5 29.7c-2.6-.8-2.6-2.6.5-3.8L46.6 8c2.1-.8 4 .5 3.4 9Z' transform='translate(3 3)' fill='white'/%3E%3C/svg%3E" />
+  <script src="https://telegram.org/js/telegram-web-app.js?62"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: var(--tg-theme-bg-color, #ffffff);
+      --text: var(--tg-theme-text-color, #222222);
+      --hint: var(--tg-theme-hint-color, #777777);
+      --button: var(--tg-theme-button-color, #2481cc);
+      --button-text: var(--tg-theme-button-text-color, #ffffff);
+      --card: var(--tg-theme-secondary-bg-color, #f4f4f5);
+      --border: rgba(127, 127, 127, 0.18);
+      --danger: var(--tg-theme-destructive-text-color, #d14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: calc(24px + var(--tg-safe-area-inset-top, 0px)) 24px calc(24px + var(--tg-safe-area-inset-bottom, 0px));
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: var(--tg-viewport-stable-height, 100vh);
+    }
+    main { max-width: 520px; margin: 0 auto; }
+    .card { padding: 20px; border-radius: 18px; background: var(--card); }
+    h1 { margin: 0 0 10px; font-size: 24px; }
+    h2 { margin: 24px 0 12px; font-size: 18px; }
+    .hint { color: var(--hint); font-size: 14px; }
+    .profile { display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: center; margin-top: 16px; }
+    .avatar {
+      display: grid; width: 52px; height: 52px; place-items: center; border-radius: 50%;
+      background: var(--button); color: var(--button-text); font-size: 20px; font-weight: 700;
+    }
+    .profile_name { font-weight: 700; }
+    .profile_id { color: var(--hint); font-size: 13px; overflow-wrap: anywhere; }
+    label { display: block; margin: 14px 0 6px; color: var(--hint); font-size: 14px; font-weight: 600; }
+    input, textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px;
+      background: var(--bg); color: var(--text); font: inherit; outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--button); }
+    textarea { min-height: 96px; resize: vertical; }
+    .error { min-height: 20px; margin-top: 10px; color: var(--danger); font-size: 14px; }
+    .local_submit {
+      width: 100%; margin-top: 16px; padding: 14px 16px; border: 0; border-radius: 12px;
+      background: var(--button); color: var(--button-text); font-size: 16px; font-weight: 600; cursor: pointer;
+    }
+    .result {
+      display: none; margin-top: 16px; padding: 14px; border-radius: 12px;
+      background: rgba(36, 129, 204, 0.12); color: var(--text); white-space: pre-wrap;
+    }
+    pre { overflow: auto; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.08); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>用户登记</h1>
+      <p id="greeting">正在读取 Telegram 用户信息...</p>
+      <p id="status" class="hint">正在初始化 Telegram 小程序...</p>
+      <div class="profile">
+        <div id="avatar" class="avatar">TG</div>
+        <div>
+          <div id="profileName" class="profile_name">Telegram 用户</div>
+          <div id="profileId" class="profile_id">等待 Telegram 数据</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>填写信息</h2>
+      <form id="registerForm">
+        <label for="name">姓名</label>
+        <input id="name" name="name" autocomplete="name" placeholder="请输入姓名" />
+        <label for="contact">联系方式</label>
+        <input id="contact" name="contact" autocomplete="tel" placeholder="手机号、邮箱或 Telegram 用户名" />
+        <label for="note">备注</label>
+        <textarea id="note" name="note" placeholder="请输入你的需求或备注"></textarea>
+        <div id="error" class="error"></div>
+        <button class="local_submit" type="submit">提交信息</button>
+      </form>
+      <div id="result" class="result"></div>
+    </section>
+
+    <h2>调试信息</h2>
+    <pre id="debug">正在加载...</pre>
+  </main>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    const greeting = document.getElementById("greeting");
+    const status = document.getElementById("status");
+    const avatar = document.getElementById("avatar");
+    const profileName = document.getElementById("profileName");
+    const profileId = document.getElementById("profileId");
+    const registerForm = document.getElementById("registerForm");
+    const nameInput = document.getElementById("name");
+    const contactInput = document.getElementById("contact");
+    const noteInput = document.getElementById("note");
+    const error = document.getElementById("error");
+    const result = document.getElementById("result");
+    const debug = document.getElementById("debug");
+
+    function formatChineseDateTime(date) {
+      return new Intl.DateTimeFormat("zh-Hans-CN", { dateStyle: "medium", timeStyle: "medium" }).format(date);
+    }
+
+    function getInitials(user) {
+      if (!user) return "TG";
+      const first = user.first_name?.trim()?.[0] || "";
+      const last = user.last_name?.trim()?.[0] || "";
+      return `${first}${last}` || user.username?.trim()?.[0]?.toUpperCase() || "TG";
+    }
+
+    function getDisplayName(user) {
+      if (!user) return "Telegram 用户";
+      return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.username || "Telegram 用户";
+    }
+
+    function getDefaultContact(user) {
+      if (!user?.username) return "";
+      return `@${user.username}`;
+    }
+
+    function validateForm() {
+      const name = nameInput.value.trim();
+      const contact = contactInput.value.trim();
+      const note = noteInput.value.trim();
+      if (!name) return "请填写姓名。";
+      if (!contact) return "请填写联系方式。";
+      if (note.length > 500) return "备注不能超过 500 个字符。";
+      return "";
+    }
+
+    function setMainButtonEnabled(enabled) {
+      if (!tg?.MainButton) return;
+      if (enabled) {
+        tg.MainButton.enable();
+        tg.MainButton.setText("提交信息");
+      } else {
+        tg.MainButton.disable();
+        tg.MainButton.setText("请先填写必填项");
+      }
+    }
+
+    async function submitToBackend(payload) {
+      const response = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: tg.initData, form: payload.form })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "提交失败，请稍后重试。");
+      return data;
+    }
+
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      if (tg.isVersionAtLeast("6.1")) {
+        tg.setHeaderColor("secondary_bg_color");
+        tg.setBackgroundColor("bg_color");
+      }
+      if (tg.isVersionAtLeast("6.2")) {
+        tg.enableClosingConfirmation();
+      }
+
+      const user = tg.initDataUnsafe?.user;
+      const displayName = getDisplayName(user);
+      greeting.textContent = user ? `你好，${displayName}！` : "已在 Telegram 中打开，但暂未读取到用户信息。";
+      status.textContent = "Telegram 小程序初始化成功。";
+      avatar.textContent = getInitials(user);
+      profileName.textContent = displayName;
+      profileId.textContent = user?.id ? `Telegram ID: ${user.id}` : "未收到用户 ID";
+
+      if (!nameInput.value.trim() && displayName !== "Telegram 用户") nameInput.value = displayName;
+      if (!contactInput.value.trim()) contactInput.value = getDefaultContact(user);
+
+      tg.MainButton.show();
+      setMainButtonEnabled(Boolean(nameInput.value.trim() && contactInput.value.trim()));
+
+      debug.textContent = JSON.stringify({
+        platform: tg.platform,
+        version: tg.version,
+        initDataExists: Boolean(tg.initData),
+        user
+      }, null, 2);
+
+      [nameInput, contactInput, noteInput].forEach((input) => {
+        input.addEventListener("input", () => {
+          error.textContent = "";
+          setMainButtonEnabled(Boolean(nameInput.value.trim() && contactInput.value.trim()));
+        });
+      });
+
+      async function doSubmit() {
+        const msg = validateForm();
+        if (msg) {
+          error.textContent = msg;
+          tg.showAlert(msg);
+          setMainButtonEnabled(false);
+          return;
+        }
+
+        const payload = {
+          form: {
+            name: nameInput.value.trim(),
+            contact: contactInput.value.trim(),
+            note: noteInput.value.trim()
+          },
+          submittedAtText: formatChineseDateTime(new Date())
+        };
+
+        tg.showConfirm("确定提交这些登记信息吗？", async (confirmed) => {
+          if (!confirmed) return;
+          try {
+            tg.MainButton.showProgress(false);
+            setMainButtonEnabled(false);
+            const serverResult = await submitToBackend(payload);
+            result.style.display = "block";
+            result.textContent = [
+              "后端已接收登记信息：",
+              `登记编号：${serverResult.registrationId}`,
+              `姓名：${serverResult.form.name}`,
+              `联系方式：${serverResult.form.contact}`,
+              `备注：${serverResult.form.note || "无"}`,
+              `提交时间：${payload.submittedAtText}`
+            ].join("\n");
+            tg.showPopup({
+              title: "提交成功",
+              message: `登记编号：${serverResult.registrationId}`,
+              buttons: [{ type: "ok" }]
+            });
+          } catch (e) {
+            error.textContent = e.message;
+            tg.showAlert(e.message);
+          } finally {
+            tg.MainButton.hideProgress();
+            setMainButtonEnabled(Boolean(nameInput.value.trim() && contactInput.value.trim()));
+          }
+        });
+      }
+
+      tg.MainButton.onClick(doSubmit);
+      registerForm.addEventListener("submit", (ev) => { ev.preventDefault(); doSubmit(); });
+    } else {
+      greeting.textContent = "请从 Telegram 机器人里打开这个页面。";
+      status.textContent = "普通浏览器只适合预览页面，不能提供 Telegram 小程序数据。";
+      debug.textContent = "window.Telegram.WebApp 不存在。";
+      registerForm.addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        alert("请在 Telegram 内打开测试后端提交。");
+      });
+    }
+  </script>
+</body>
+</html>
+
